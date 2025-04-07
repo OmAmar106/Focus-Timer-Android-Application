@@ -17,9 +17,9 @@
         android:padding="10dp"
         android:background="@drawable/logo_background"
         android:gravity="center_vertical"
+        android:layout_margin="16dp"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        android:layout_margin="16dp">
+        app:layout_constraintStart_toStartOf="parent">
 
         <ImageView
             android:id="@+id/logoImage"
@@ -39,22 +39,41 @@
             android:layout_marginStart="10dp" />
     </LinearLayout>
 
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/themeSwitch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/themeIcon"
+        android:layout_marginTop="25dp"
+        android:layout_marginEnd="4dp" />
+
+    <TextView
+        android:id="@+id/themeIcon"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🌙"
+        android:textSize="24sp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_margin="29dp" />
+
+
     <com.example.focustimerandroidapplication.CircularCountdownView
         android:id="@+id/circularCountdown"
         android:layout_width="250dp"
         android:layout_height="250dp"
         app:layout_constraintTop_toBottomOf="@id/logoRow"
-        android:layout_marginTop="47dp"
+        android:layout_marginTop="52dp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Buttons -->
     <LinearLayout
         android:id="@+id/buttonRow"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginTop="32dp"
+        android:layout_marginTop="36dp"
         app:layout_constraintTop_toBottomOf="@id/circularCountdown"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">

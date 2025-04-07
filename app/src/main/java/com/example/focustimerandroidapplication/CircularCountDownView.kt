@@ -132,4 +132,10 @@ class CircularCountdownView @JvmOverloads constructor(
         val sweep = -progress * 360f
         canvas.drawArc(rect, -90f, sweep, false, arcPaint)
     }
+
+    fun setTextColor(color: Int) {
+        minutesInput.setTextColor(color)
+        secondsInput.setTextColor(color)
+        colon.setTextColor(color)
+    }
 }

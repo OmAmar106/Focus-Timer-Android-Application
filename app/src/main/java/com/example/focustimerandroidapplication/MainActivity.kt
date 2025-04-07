@@ -6,12 +6,11 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.*
 import android.provider.Settings
-import android.text.Editable
-import android.text.InputType
-import android.text.TextWatcher
-import android.view.inputmethod.InputMethodManager
-import android.widget.Button
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.appcompat.widget.SwitchCompat
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
@@ -19,24 +18,51 @@ class MainActivity : AppCompatActivity() {
     private lateinit var circularView: CircularCountdownView
     private lateinit var startButton: Button
     private lateinit var resetButton: Button
+    private lateinit var themeSwitch: SwitchCompat
+    private lateinit var themeIcon: TextView
+    private lateinit var logoText: TextView
+    private lateinit var logoRow: LinearLayout
+    private lateinit var logoImage: ImageView
 
     private var timer: CountDownTimer? = null
     private var initialTime = 60000L
     private var totalTime = initialTime
     private var timeLeft = totalTime
     private var isTimerRunning = false
+    private lateinit var mainLayout: ConstraintLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
+
+        val sharedPref = getSharedPreferences("settings", Context.MODE_PRIVATE)
+        val isDarkMode = sharedPref.getBoolean("dark_mode", true)
+//        AppCompatDelegate.setDefaultNightMode(
+//            if (isDarkMode) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
+//        )
+
+        logoImage = findViewById(R.id.logoImage)
         super.onCreate(savedInstanceState)
-        setStatusBarColor(ContextCompat.getColor(this, android.R.color.background_dark))
         setContentView(R.layout.activity_main)
+        mainLayout = findViewById<ConstraintLayout>(R.id.main)
 
         circularView = findViewById(R.id.circularCountdown)
         startButton = findViewById(R.id.startButton)
         resetButton = findViewById(R.id.stopButton)
-
+        themeSwitch = findViewById(R.id.themeSwitch)
+        themeIcon = findViewById(R.id.themeIcon)
+        logoText = findViewById(R.id.logoText)
+        logoRow = findViewById(R.id.logoRow)
         resetButton.text = "Reset"
         resetButton.isEnabled = false
+        themeSwitch.isChecked = isDarkMode
+        updateThemeUI(isDarkMode)
+
+        themeSwitch.setOnCheckedChangeListener { _, isChecked ->
+            sharedPref.edit().putBoolean("dark_mode", isChecked).apply()
+            AppCompatDelegate.setDefaultNightMode(
+                if (isChecked) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
+            )
+            recreate()
+        }
 
         circularView.onTimeEdited = { minutes, seconds ->
             val newTime = (minutes * 60 + seconds) * 1000L
@@ -62,6 +88,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateThemeUI(isDark: Boolean) {
+        themeIcon.text = if (isDark) "🌙" else "☀️"
+        logoText.setTextColor(if (isDark) Color.WHITE else Color.BLACK)
+        resetButton.setTextColor(if (isDark) Color.WHITE else Color.BLACK)
+        startButton.setTextColor(Color.BLACK)
+        circularView.setTextColor(if (isDark) Color.WHITE else Color.BLACK)
+        mainLayout.setBackgroundColor(if (isDark) Color.BLACK else Color.WHITE)
+        if(isDark){
+            logoRow.background = ContextCompat.getDrawable(this, R.drawable.logo_background)
+        }
+        else {
+            logoRow.background = ContextCompat.getDrawable(this, R.drawable.logo_background_white)
+        }
+//        if (isDark) {
+//            logoImage.setImageResource(R.drawable.logo)
+//        } else {
+//            logoImage.setImageResource(R.drawable.logo_white)
+//        }
+
+    }
+
     private fun startTimer(startTime: Long) {
         requestDnd(true)
         setStatusBarColor(Color.parseColor("#FF69B4"))
@@ -73,7 +120,7 @@ class MainActivity : AppCompatActivity() {
                 timeLeft = millisUntilFinished
                 val seconds = millisUntilFinished / 1000
                 circularView.setTime((seconds / 60).toInt(), (seconds % 60).toInt())
-                circularView.setProgress((millisUntilFinished-1000).toFloat() / totalTime)
+                circularView.setProgress((millisUntilFinished - 1000).toFloat() / totalTime)
             }
 
             override fun onFinish() {
