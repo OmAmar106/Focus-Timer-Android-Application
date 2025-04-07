@@ -16,12 +16,15 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var circularView: CircularCountdownView
     private lateinit var startButton: Button
-    private lateinit var stopButton: Button
+    private lateinit var resetButton: Button
     private var timer: CountDownTimer? = null
 
-    private val totalTime = 60000L
+    private var initialTime = 60000L
+    private var totalTime = initialTime
+    private var prev = initialTime
     private var timeLeft = totalTime
     private var isTimerRunning = false
+    private var isTimerPaused = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,30 +33,62 @@ class MainActivity : AppCompatActivity() {
 
         circularView = findViewById(R.id.circularCountdown)
         startButton = findViewById(R.id.startButton)
-        stopButton = findViewById(R.id.stopButton)
+        resetButton = findViewById(R.id.stopButton)
+        resetButton.text = "Reset"
+        resetButton.isEnabled = false
 
-        startButton.setOnClickListener {
-            startTimer()
-            startButton.isEnabled = false
-            stopButton.isEnabled = true
+        if (savedInstanceState != null) {
+            timeLeft = savedInstanceState.getLong("timeLeft", totalTime)
+            isTimerRunning = savedInstanceState.getBoolean("isRunning", false)
+            if (isTimerRunning) {
+                startTimer(timeLeft)
+                startButton.text = "Pause"
+                resetButton.isEnabled = true
+//                val k = 1
+//                circularView.setProgress(k.toFloat())
+            } else {
+                val seconds = timeLeft / 1000
+                circularView.setTimeText(String.format("%02d:%02d", seconds / 60, seconds % 60))
+                circularView.setProgress(timeLeft.toFloat() / totalTime)
+            }
         }
 
-        stopButton.setOnClickListener {
-            stopTimer()
+        startButton.setOnClickListener {
+            if (!isTimerRunning) {
+                startTimer(timeLeft)
+                startButton.text = "Pause"
+                resetButton.isEnabled = true
+            } else {
+                pauseTimer()
+                startButton.text = "Start"
+            }
+        }
+
+        resetButton.setOnClickListener {
+            resetTimer()
         }
     }
 
-    private fun startTimer() {
-        requestDnd(true)
-        setStatusBarColor(Color.parseColor("#FF69B4")) // pink
-        isTimerRunning = true
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putLong("timeLeft", timeLeft)
+        outState.putBoolean("isRunning", isTimerRunning)
+    }
 
-        timer = object : CountDownTimer(totalTime, 1000) {
+    private fun startTimer(startTime: Long, isTimerPaused1: Boolean = false) {
+        requestDnd(true)
+        setStatusBarColor(Color.parseColor("#FF69B4"))
+        isTimerRunning = true
+        isTimerPaused = false
+        if (isTimerPaused1) {
+            prev = startTime
+        }
+        timer = object : CountDownTimer(startTime, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 timeLeft = millisUntilFinished
                 val seconds = millisUntilFinished / 1000
                 circularView.setTimeText(String.format("%02d:%02d", seconds / 60, seconds % 60))
-                circularView.setProgress((totalTime - timeLeft).toFloat() / totalTime)
+                circularView.setProgress(millisUntilFinished.toFloat() / totalTime)
             }
 
             override fun onFinish() {
@@ -62,17 +97,35 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun stopTimer() {
+    private fun pauseTimer() {
         timer?.cancel()
-        finishTimer()
+        isTimerRunning = false
+        isTimerPaused = true
+    }
+
+    private fun resetTimer() {
+        timer?.cancel()
+        isTimerRunning = false
+        isTimerPaused = false
+        timeLeft = initialTime
+        val seconds = initialTime / 1000
+        circularView.setTimeText(String.format("%02d:%02d", seconds / 60, seconds % 60))
+        circularView.setProgress(1f)
+        prev = initialTime
+        startButton.text = "Start"
+        startButton.isEnabled = true
+        resetButton.isEnabled = false
+        requestDnd(false)
+        setStatusBarColor(ContextCompat.getColor(this, android.R.color.background_dark))
     }
 
     private fun finishTimer() {
         isTimerRunning = false
         circularView.setTimeText("Done!")
-        circularView.setProgress(1f)
+        circularView.setProgress(0f)
+        startButton.text = "Start"
         startButton.isEnabled = true
-        stopButton.isEnabled = false
+        resetButton.isEnabled = false
         requestDnd(false)
         setStatusBarColor(ContextCompat.getColor(this, android.R.color.background_dark))
     }
@@ -95,7 +148,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             if (!notificationManager.isNotificationPolicyAccessGranted) {
                 startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
             } else {

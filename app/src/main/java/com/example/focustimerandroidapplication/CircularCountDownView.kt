@@ -23,8 +23,8 @@ class CircularCountdownView @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
     }
 
-    private var progress: Float = 0f
-    private var timeText: String = "00:00"
+    private var progress: Float = 1f
+    private var timeText: String = "01:00"
 
     fun setProgress(p: Float) {
         progress = p
@@ -42,7 +42,7 @@ class CircularCountdownView @JvmOverloads constructor(
         val cx = width / 2f
         val cy = height / 2f - 20f
         val rect = RectF(cx - radius, cy - radius, cx + radius, cy + radius)
-        canvas.drawArc(rect, -90f, progress * 360, false, arcPaint)
+        canvas.drawArc(rect, -90f, -progress * 360, false, arcPaint)
         canvas.drawText(timeText, cx, cy + textPaint.textSize / 3, textPaint)
     }
 }
