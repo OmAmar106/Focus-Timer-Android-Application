@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.media.MediaPlayer
 import android.os.*
 import android.provider.Settings
 import android.widget.*
@@ -12,6 +13,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.widget.SwitchCompat
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
+import android.content.ComponentName
 
 class MainActivity : AppCompatActivity() {
 
@@ -30,6 +32,19 @@ class MainActivity : AppCompatActivity() {
     private var timeLeft = totalTime
     private var isTimerRunning = false
     private lateinit var mainLayout: ConstraintLayout
+    private var player: MediaPlayer? = null
+
+    private lateinit var mediaNowPlaying: LinearLayout
+    private lateinit var songTitle: TextView
+    private lateinit var songArtist: TextView
+    private lateinit var songProgress: SeekBar
+    private lateinit var playPauseButton: Button
+
+    private fun isNotificationListenerEnabled(): Boolean {
+        val cn = ComponentName(this, MediaNotificationListener::class.java)
+        val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+        return flat?.contains(cn.flattenToString()) == true
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
 
@@ -38,10 +53,18 @@ class MainActivity : AppCompatActivity() {
 //        AppCompatDelegate.setDefaultNightMode(
 //            if (isDarkMode) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
 //        )
+        if (!isNotificationListenerEnabled()) {
+            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+            startActivity(intent)
+        }
+
+//        val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+//        startActivity(intent)
 
         logoImage = findViewById(R.id.logoImage)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
         mainLayout = findViewById<ConstraintLayout>(R.id.main)
 
         circularView = findViewById(R.id.circularCountdown)
@@ -55,6 +78,24 @@ class MainActivity : AppCompatActivity() {
         resetButton.isEnabled = false
         themeSwitch.isChecked = isDarkMode
         updateThemeUI(isDarkMode)
+
+        if (savedInstanceState != null) {
+            initialTime = savedInstanceState.getLong("initialTime", 60000L)
+            totalTime = savedInstanceState.getLong("totalTime", initialTime)
+            timeLeft = savedInstanceState.getLong("timeLeft", totalTime)
+            isTimerRunning = savedInstanceState.getBoolean("isTimerRunning", false)
+            startButton.text = savedInstanceState.getString("startButton.text")
+            resetButton.isEnabled = savedInstanceState.getBoolean("resetButton.isEnabled")
+            val seconds = timeLeft / 1000
+            circularView.setTime((seconds / 60).toInt(), (seconds % 60).toInt())
+            circularView.setProgress(timeLeft.toFloat() / totalTime)
+
+            if (isTimerRunning) startTimer(timeLeft)
+        } else {
+            val seconds = timeLeft / 1000
+            circularView.setTime((seconds / 60).toInt(), (seconds % 60).toInt())
+        }
+
 
         themeSwitch.setOnCheckedChangeListener { _, isChecked ->
             sharedPref.edit().putBoolean("dark_mode", isChecked).apply()
@@ -73,7 +114,17 @@ class MainActivity : AppCompatActivity() {
         }
 
         startButton.setOnClickListener {
-            if (!isTimerRunning) {
+            if(startButton.text.toString()=="Snooze"){
+                player?.stop()
+                player?.release()
+                player = null
+                startButton.text = "Start"
+                timeLeft = initialTime
+                val seconds = timeLeft / 1000
+                circularView.setTime((seconds / 60).toInt(), (seconds % 60).toInt())
+                circularView.setProgress(1f)
+            }
+            else if (!isTimerRunning) {
                 startTimer(timeLeft)
                 startButton.text = "Pause"
                 resetButton.isEnabled = true
@@ -86,6 +137,20 @@ class MainActivity : AppCompatActivity() {
         resetButton.setOnClickListener {
             resetTimer()
         }
+
+        themeSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isTimerRunning) {
+                Toast.makeText(this, "Can't change theme while timer is running", Toast.LENGTH_SHORT).show()
+                themeSwitch.isChecked = !isChecked
+                return@setOnCheckedChangeListener
+            }
+            sharedPref.edit().putBoolean("dark_mode", isChecked).apply()
+            AppCompatDelegate.setDefaultNightMode(
+                if (isChecked) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
+            )
+            recreate()
+        }
+
     }
 
     private fun updateThemeUI(isDark: Boolean) {
@@ -109,18 +174,39 @@ class MainActivity : AppCompatActivity() {
 
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putLong("initialTime", initialTime)
+        outState.putLong("totalTime", totalTime)
+        outState.putLong("timeLeft", timeLeft)
+        outState.putBoolean("isTimerRunning", isTimerRunning)
+        outState.putString("startButton.text",startButton.text.toString())
+        outState.putBoolean("resetButton.isEnabled",resetButton.isEnabled)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        player?.stop()
+        player?.release()
+        player = null
+    }
+
     private fun startTimer(startTime: Long) {
         requestDnd(true)
         setStatusBarColor(Color.parseColor("#FF69B4"))
         isTimerRunning = true
 
-        timer = object : CountDownTimer(startTime, 1000) {
+        timer = object : CountDownTimer(startTime, 50) {
             override fun onTick(millisUntilFinished: Long) {
                 circularView.setEditable(false)
                 timeLeft = millisUntilFinished
-                val seconds = millisUntilFinished / 1000
-                circularView.setTime((seconds / 60).toInt(), (seconds % 60).toInt())
-                circularView.setProgress((millisUntilFinished - 1000).toFloat() / totalTime)
+
+                circularView.setProgress(millisUntilFinished.toFloat() / totalTime)
+
+                if (millisUntilFinished % 1000L < 50L) {
+                    val seconds = millisUntilFinished / 1000
+                    circularView.setTime((seconds / 60).toInt(), (seconds % 60).toInt())
+                }
             }
 
             override fun onFinish() {
@@ -135,9 +221,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun resetTimer() {
+        if(startButton.text.toString()=="Snooze"){
+            return
+        }
         circularView.setEditable(true)
         timer?.cancel()
         isTimerRunning = false
+        totalTime = initialTime
         timeLeft = initialTime
         val seconds = timeLeft / 1000
         circularView.setTime((seconds / 60).toInt(), (seconds % 60).toInt())
@@ -153,9 +243,12 @@ class MainActivity : AppCompatActivity() {
         isTimerRunning = false
         circularView.setTimeText("Done!")
         circularView.setProgress(0f)
-        startButton.text = "Start"
+        startButton.text = "Snooze"
         resetButton.isEnabled = true
         requestDnd(false)
+        player = MediaPlayer.create(this, R.raw.timer_end_sound)
+        player?.isLooping = true
+        player?.start()
         setStatusBarColor(ContextCompat.getColor(this, android.R.color.background_dark))
     }
 
@@ -177,7 +270,7 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
             } else {
                 notificationManager.setInterruptionFilter(
-                    if (enable) NotificationManager.INTERRUPTION_FILTER_NONE
+                    if (enable) NotificationManager.INTERRUPTION_FILTER_PRIORITY
                     else NotificationManager.INTERRUPTION_FILTER_ALL
                 )
             }
@@ -188,3 +281,10 @@ class MainActivity : AppCompatActivity() {
         if (!isTimerRunning) super.onBackPressed()
     }
 }
+
+// To do :
+// Debug the Mode Switching Error - Done
+// Make the timer go smoother - Done
+// Enable music even when dnd is on - Done
+// Add a Alarm like thing after the end of the timer - Done
+// Show music being played

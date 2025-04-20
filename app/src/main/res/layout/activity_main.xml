@@ -97,4 +97,60 @@
             android:enabled="false"/>
     </LinearLayout>
 
+<!--    <LinearLayout-->
+<!--        android:id="@+id/mediaNowPlaying"-->
+<!--        android:layout_width="0dp"-->
+<!--        android:layout_height="wrap_content"-->
+<!--        android:orientation="vertical"-->
+<!--        android:padding="16dp"-->
+<!--        android:layout_marginTop="24dp"-->
+<!--        android:layout_marginStart="16dp"-->
+<!--        android:layout_marginEnd="16dp"-->
+
+<!--        android:gravity="center"-->
+<!--        app:layout_constraintTop_toBottomOf="@id/buttonRow"-->
+<!--        app:layout_constraintStart_toStartOf="parent"-->
+<!--        app:layout_constraintEnd_toEndOf="parent">-->
+
+<!--        <TextView-->
+<!--            android:id="@+id/songTitle"-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:text="Song Title"-->
+<!--            android:textColor="@android:color/white"-->
+<!--            android:textSize="20sp"-->
+<!--            android:textStyle="bold"-->
+<!--            android:layout_marginBottom="4dp" />-->
+
+<!--        <TextView-->
+<!--            android:id="@+id/songArtist"-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:text="Artist"-->
+<!--            android:textColor="@android:color/white"-->
+<!--            android:textSize="16sp"-->
+<!--            android:layout_marginBottom="12dp" />-->
+
+<!--        &lt;!&ndash; Playback Progress &ndash;&gt;-->
+<!--        <SeekBar-->
+<!--            android:id="@+id/songProgress"-->
+<!--            android:layout_width="0dp"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:layout_marginBottom="12dp"-->
+<!--            android:max="100"-->
+<!--            android:progress="0"-->
+<!--            android:thumbTint="@android:color/white"-->
+<!--            android:progressTint="@android:color/white" />-->
+
+<!--        &lt;!&ndash; Play/Pause Button &ndash;&gt;-->
+<!--        <com.google.android.material.button.MaterialButton-->
+<!--            android:id="@+id/playPauseButton"-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:text="Play"-->
+<!--            android:backgroundTint="@android:color/holo_blue_dark"-->
+<!--            android:layout_marginBottom="12dp" />-->
+
+<!--    </LinearLayout>-->
+
 </androidx.constraintlayout.widget.ConstraintLayout>
