@@ -1,5 +1,6 @@
 package com.example.focustimerandroidapplication
 
+import android.content.Intent
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -20,7 +21,6 @@ class MediaNotificationListener : NotificationListenerService() {
             mediaController = MediaController(applicationContext, token)
             mediaController?.registerCallback(controllerCallback)
 
-            // Optional: fetch current info immediately
             updateMediaInfo(mediaController)
         } catch (e: Exception) {
             e.printStackTrace()
@@ -44,9 +44,15 @@ class MediaNotificationListener : NotificationListenerService() {
         val albumArt = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
         val position = state?.position
         val isPlaying = state?.state == PlaybackState.STATE_PLAYING
-
-        val message = "🎵 $title - $artist\n▶️ Playing: $isPlaying\n⏱️ Position: ${position}ms"
-        Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show()
+        val intent = Intent("media_info_update")
+        intent.putExtra("title", title)
+        intent.putExtra("artist", artist)
+        intent.putExtra("albumArt", albumArt)
+        intent.putExtra("position", position)
+        intent.putExtra("isPlaying", isPlaying)
+        sendBroadcast(intent)
+//        val message = "🎵 $title - $artist\n▶️ Playing: $isPlaying\n⏱️ Position: ${position}ms"
+//        Toast.makeText(applicationContext, "message", Toast.LENGTH_LONG).show()
 
     }
 

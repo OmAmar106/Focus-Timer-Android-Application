@@ -14,6 +14,14 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import android.content.ComponentName
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.widget.ImageButton
+import android.widget.ImageView
+import android.widget.ProgressBar
+import android.widget.TextView
+import android.os.Build
 
 class MainActivity : AppCompatActivity() {
 
@@ -40,6 +48,28 @@ class MainActivity : AppCompatActivity() {
     private lateinit var songProgress: SeekBar
     private lateinit var playPauseButton: Button
 
+    private val mediaInfoReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val title = intent?.getStringExtra("title") ?: ""
+            val artist = intent?.getStringExtra("artist") ?: ""
+            val isPlaying = intent?.getBooleanExtra("isPlaying", false)
+            val position = intent?.getLongExtra("position", 0L)
+            val bitmap = intent?.getParcelableExtra<Bitmap>("albumArt")
+
+            findViewById<TextView>(R.id.songTitle).text = title
+            findViewById<TextView>(R.id.artistName).text = artist
+            findViewById<ProgressBar>(R.id.musicProgress).progress = (position?:0L).toInt() % 100
+
+            if (bitmap != null) {
+                findViewById<ImageView>(R.id.albumArt).setImageBitmap(bitmap)
+            }
+            Toast.makeText(applicationContext, "message", Toast.LENGTH_LONG).show()
+
+            val playPauseButton = findViewById<ImageButton>(R.id.playPauseButton)
+//            playPauseButton.setImageResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play)
+        }
+    }
+
     private fun isNotificationListenerEnabled(): Boolean {
         val cn = ComponentName(this, MediaNotificationListener::class.java)
         val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
@@ -53,6 +83,7 @@ class MainActivity : AppCompatActivity() {
 //        AppCompatDelegate.setDefaultNightMode(
 //            if (isDarkMode) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
 //        )
+
         if (!isNotificationListenerEnabled()) {
             val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
             startActivity(intent)
@@ -64,6 +95,9 @@ class MainActivity : AppCompatActivity() {
         logoImage = findViewById(R.id.logoImage)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        val filter = IntentFilter("media_info_update")
+        registerReceiver(mediaInfoReceiver, filter, RECEIVER_NOT_EXPORTED)
 
         mainLayout = findViewById<ConstraintLayout>(R.id.main)
 
@@ -186,6 +220,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        unregisterReceiver(mediaInfoReceiver)
         player?.stop()
         player?.release()
         player = null
