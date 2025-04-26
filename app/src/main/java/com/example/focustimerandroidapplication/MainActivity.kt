@@ -16,6 +16,9 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import android.content.ComponentName
 import android.graphics.Bitmap
+import android.graphics.BitmapShader
+import android.graphics.BlurMaskFilter
+import android.graphics.Shader
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
@@ -23,8 +26,19 @@ import android.media.session.MediaController
 import android.media.session.MediaSession
 import android.media.MediaMetadata
 import android.media.session.PlaybackState
+import android.renderscript.Allocation
+import android.renderscript.RenderScript
+import android.renderscript.ScriptIntrinsicBlur
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.util.TypedValue
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Paint
+import androidx.core.graphics.ColorUtils
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.sin
 
 interface MediaInfoListener {
     fun onMediaInfoUpdatedWithImage(
@@ -165,39 +179,11 @@ class MainActivity : AppCompatActivity(), MediaInfoListener {
     private val handler = Handler(Looper.getMainLooper())
     private var colorIndex = 0
 
-    private val colors = listOf(
-        Color.parseColor("#FF6F61"),
-        Color.parseColor("#3F88C5"),
-        Color.parseColor("#2F3061"),
-        Color.parseColor("#43B929")
-    )
-
-    private val updateBackgroundRunnable = object : Runnable {
-        override fun run() {
-            val startColor = colors[colorIndex % colors.size]
-            val endColor = colors[(colorIndex + 1) % colors.size]
-
-            val colorAnimator = ValueAnimator.ofArgb(startColor, endColor)
-            colorAnimator.duration = 800
-            colorAnimator.addUpdateListener { animator ->
-                val color = animator.animatedValue as Int
-                val drawable = musicPlayer.background.mutate() as GradientDrawable
-                drawable.setColor(color)
-            }
-            colorAnimator.start()
-
-            colorIndex++
-            handler.postDelayed(this, 800)
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         MediaInfoDispatcher.listener = this
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         val handler = Handler(Looper.getMainLooper())
-
-        handler.post(updateBackgroundRunnable)
 
         val sharedPref = getSharedPreferences("settings", Context.MODE_PRIVATE)
         val isDarkMode = sharedPref.getBoolean("dark_mode", true)
@@ -206,7 +192,6 @@ class MainActivity : AppCompatActivity(), MediaInfoListener {
             val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
             startActivity(intent)
         }
-
 
         songTitle = findViewById(R.id.songTitle)
         songArtist = findViewById(R.id.artistName)
@@ -314,19 +299,23 @@ class MainActivity : AppCompatActivity(), MediaInfoListener {
 
         if (hasSong && isPlaying && !isAnimating) {
             isAnimating = true
-            handler.post(updateBackgroundRunnable)
         } else if ((!hasSong || !isPlaying) && isAnimating) {
             isAnimating = false
-            handler.removeCallbacks(updateBackgroundRunnable)
         }
-        if (albumArt1 != null) {
+
+        if(albumArt1!=null) {
             albumArt.setImageBitmap(albumArt1)
-            val drawable = BitmapDrawable(resources, albumArt1)
-//            val gradientDrawable = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.TRANSPARENT, Color.parseColor("#80000000")))
-//            gradientDrawable.cornerRadius = 16f  // Optional: adjust the corner radius to match your design
-//            val layerDrawable = LayerDrawable(arrayOf(drawable, gradientDrawable))
-//            musicPlayer.background = layerDrawable
+//            val backgroundDrawable = musicPlayer.background
+//
+//            if (backgroundDrawable is GradientDrawable) {
+//                var currentAngle = backgroundDrawable.orientation.ordinal * 45
+//                currentAngle += 1
+//                currentAngle %= 360
+//                backgroundDrawable.orientation.ordinal = currentAngle
+//                musicPlayer.background = backgroundDrawable
+//            }
         }
+
         if (position != null && duration != null && duration > 0) {
             musicProgress.max = duration.toInt()
             musicProgress.progress = position.toInt()
