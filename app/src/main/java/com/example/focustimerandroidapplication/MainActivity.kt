@@ -32,6 +32,7 @@ import android.renderscript.ScriptIntrinsicBlur
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.TypedValue
+import android.view.KeyEvent
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.Paint
 import androidx.core.graphics.ColorUtils
@@ -137,6 +138,19 @@ class MediaNotificationListener : NotificationListenerService() {
         mediaController?.unregisterCallback(controllerCallback)
         handler.removeCallbacks(updateRunnable)
     }
+
+//    fun togglePlayPause() {
+//        onListenerConnected()
+//        mediaController?.let { controller ->
+//            val playbackState = controller.playbackState?.state
+//            if (playbackState == PlaybackState.STATE_PLAYING) {
+//                controller.transportControls.pause()  // Pause the media
+//            } else {
+//                controller.transportControls.play()  // Play the media
+//            }
+//        }
+//    }
+
 }
 
 class MainActivity : AppCompatActivity(), MediaInfoListener {
@@ -305,15 +319,6 @@ class MainActivity : AppCompatActivity(), MediaInfoListener {
 
         if(albumArt1!=null) {
             albumArt.setImageBitmap(albumArt1)
-//            val backgroundDrawable = musicPlayer.background
-//
-//            if (backgroundDrawable is GradientDrawable) {
-//                var currentAngle = backgroundDrawable.orientation.ordinal * 45
-//                currentAngle += 1
-//                currentAngle %= 360
-//                backgroundDrawable.orientation.ordinal = currentAngle
-//                musicPlayer.background = backgroundDrawable
-//            }
         }
 
         if (position != null && duration != null && duration > 0) {
