@@ -1,5 +1,6 @@
 package com.example.focustimerandroidapplication
 
+import android.animation.ValueAnimator
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
@@ -14,16 +15,117 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import android.content.ComponentName
-import android.content.BroadcastReceiver
-import android.content.IntentFilter
 import android.graphics.Bitmap
-import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.ProgressBar
-import android.widget.TextView
-import android.os.Build
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
+import android.media.session.MediaController
+import android.media.session.MediaSession
+import android.media.MediaMetadata
+import android.media.session.PlaybackState
+import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
 
-class MainActivity : AppCompatActivity() {
+interface MediaInfoListener {
+    fun onMediaInfoUpdatedWithImage(
+        title: String?,
+        artist: String?,
+        isPlaying: Boolean,
+        position: Long?,
+        albumArt: Bitmap?,
+        duration: Long?
+    )
+}
+
+object MediaInfoDispatcher {
+    var listener: MediaInfoListener? = null
+}
+
+class MediaNotificationListener : NotificationListenerService() {
+    private var mediaController: MediaController? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private val updateRunnable = object : Runnable {
+        override fun run() {
+            updateMediaInfo(mediaController)
+            handler.postDelayed(this, 1000L)
+        }
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        activeNotifications?.forEach { sbn ->
+            handleNotification(sbn)
+        }
+    }
+
+    private fun handleNotification(sbn: StatusBarNotification?){
+        val extras = sbn?.notification?.extras ?: return
+        if (!extras.containsKey("android.mediaSession")) return
+        val token = extras.getParcelable<MediaSession.Token>("android.mediaSession") ?: return
+        try {
+            mediaController = MediaController(applicationContext, token)
+            mediaController?.registerCallback(controllerCallback)
+            updateMediaInfo(mediaController)
+            handler.post(updateRunnable)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        val extras = sbn?.notification?.extras ?: return
+        if (!extras.containsKey("android.mediaSession")) return
+        val token = extras.getParcelable<MediaSession.Token>("android.mediaSession") ?: return
+        try {
+            mediaController = MediaController(applicationContext, token)
+            mediaController?.registerCallback(controllerCallback)
+            updateMediaInfo(mediaController)
+            handler.post(updateRunnable)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private val controllerCallback = object : MediaController.Callback() {
+        override fun onMetadataChanged(metadata: MediaMetadata?) {
+            updateMediaInfo(mediaController)
+        }
+
+        override fun onPlaybackStateChanged(state: PlaybackState?) {
+            updateMediaInfo(mediaController)
+        }
+    }
+
+    private fun updateMediaInfo(controller: MediaController?) {
+        val metadata = controller?.metadata
+        val state = controller?.playbackState
+
+        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+        val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+        val isPlaying = state?.state == PlaybackState.STATE_PLAYING
+
+        val basePosition = state?.position ?: 0L
+        val lastUpdateTime = state?.lastPositionUpdateTime ?: 0L
+        val timeDiff = SystemClock.elapsedRealtime() - lastUpdateTime
+        val position = if (isPlaying) basePosition + timeDiff else basePosition
+        val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)
+
+        val imageBitmap = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+            ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+
+        MediaInfoDispatcher.listener?.onMediaInfoUpdatedWithImage(
+            title, artist, isPlaying, position, imageBitmap,duration
+        )
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        mediaController?.unregisterCallback(controllerCallback)
+        handler.removeCallbacks(updateRunnable)
+    }
+}
+
+class MainActivity : AppCompatActivity(), MediaInfoListener {
 
     private lateinit var circularView: CircularCountdownView
     private lateinit var startButton: Button
@@ -42,33 +144,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mainLayout: ConstraintLayout
     private var player: MediaPlayer? = null
 
-    private lateinit var mediaNowPlaying: LinearLayout
     private lateinit var songTitle: TextView
     private lateinit var songArtist: TextView
-    private lateinit var songProgress: SeekBar
-    private lateinit var playPauseButton: Button
-
-    private val mediaInfoReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            val title = intent?.getStringExtra("title") ?: ""
-            val artist = intent?.getStringExtra("artist") ?: ""
-            val isPlaying = intent?.getBooleanExtra("isPlaying", false)
-            val position = intent?.getLongExtra("position", 0L)
-            val bitmap = intent?.getParcelableExtra<Bitmap>("albumArt")
-
-            findViewById<TextView>(R.id.songTitle).text = title
-            findViewById<TextView>(R.id.artistName).text = artist
-            findViewById<ProgressBar>(R.id.musicProgress).progress = (position?:0L).toInt() % 100
-
-            if (bitmap != null) {
-                findViewById<ImageView>(R.id.albumArt).setImageBitmap(bitmap)
-            }
-            Toast.makeText(applicationContext, "message", Toast.LENGTH_LONG).show()
-
-            val playPauseButton = findViewById<ImageButton>(R.id.playPauseButton)
-//            playPauseButton.setImageResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play)
-        }
-    }
+    private lateinit var musicProgress: ProgressBar
+    private lateinit var PlayPauseButton: ImageButton
+    private lateinit var albumArt: ImageView
+    private lateinit var musicPlayer: LinearLayout
+    private lateinit var timeElapsed: TextView
+    private lateinit var totalTimeText: TextView
+    private lateinit var prevButton: ImageButton
+    private lateinit var nextButton: ImageButton
 
     private fun isNotificationListenerEnabled(): Boolean {
         val cn = ComponentName(this, MediaNotificationListener::class.java)
@@ -76,31 +161,59 @@ class MainActivity : AppCompatActivity() {
         return flat?.contains(cn.flattenToString()) == true
     }
 
+    private var isAnimating = false
+    private val handler = Handler(Looper.getMainLooper())
+    private var colorIndex = 0
+
+    private val colors = listOf(
+        Color.parseColor("#FF6F61"),
+        Color.parseColor("#3F88C5"),
+        Color.parseColor("#2F3061"),
+        Color.parseColor("#43B929")
+    )
+
+    private val updateBackgroundRunnable = object : Runnable {
+        override fun run() {
+            val startColor = colors[colorIndex % colors.size]
+            val endColor = colors[(colorIndex + 1) % colors.size]
+
+            val colorAnimator = ValueAnimator.ofArgb(startColor, endColor)
+            colorAnimator.duration = 800
+            colorAnimator.addUpdateListener { animator ->
+                val color = animator.animatedValue as Int
+                val drawable = musicPlayer.background.mutate() as GradientDrawable
+                drawable.setColor(color)
+            }
+            colorAnimator.start()
+
+            colorIndex++
+            handler.postDelayed(this, 800)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        MediaInfoDispatcher.listener = this
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        val handler = Handler(Looper.getMainLooper())
+
+        handler.post(updateBackgroundRunnable)
 
         val sharedPref = getSharedPreferences("settings", Context.MODE_PRIVATE)
         val isDarkMode = sharedPref.getBoolean("dark_mode", true)
-//        AppCompatDelegate.setDefaultNightMode(
-//            if (isDarkMode) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
-//        )
 
         if (!isNotificationListenerEnabled()) {
             val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
             startActivity(intent)
         }
 
-//        val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
-//        startActivity(intent)
 
+        songTitle = findViewById(R.id.songTitle)
+        songArtist = findViewById(R.id.artistName)
+        musicProgress = findViewById(R.id.musicProgress)
+        musicPlayer = findViewById(R.id.musicPlayer)
         logoImage = findViewById(R.id.logoImage)
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        val filter = IntentFilter("media_info_update")
-        registerReceiver(mediaInfoReceiver, filter, RECEIVER_NOT_EXPORTED)
-
-        mainLayout = findViewById<ConstraintLayout>(R.id.main)
-
+        mainLayout = findViewById(R.id.main)
         circularView = findViewById(R.id.circularCountdown)
         startButton = findViewById(R.id.startButton)
         resetButton = findViewById(R.id.stopButton)
@@ -108,6 +221,13 @@ class MainActivity : AppCompatActivity() {
         themeIcon = findViewById(R.id.themeIcon)
         logoText = findViewById(R.id.logoText)
         logoRow = findViewById(R.id.logoRow)
+        totalTimeText = findViewById(R.id.totalTime)
+        timeElapsed = findViewById(R.id.timeElapsed)
+        prevButton = findViewById(R.id.prevButton)
+        nextButton = findViewById(R.id.nextButton)
+        PlayPauseButton = findViewById(R.id.playPauseButton)
+
+        albumArt = findViewById(R.id.albumArt)
         resetButton.text = "Reset"
         resetButton.isEnabled = false
         themeSwitch.isChecked = isDarkMode
@@ -123,13 +243,11 @@ class MainActivity : AppCompatActivity() {
             val seconds = timeLeft / 1000
             circularView.setTime((seconds / 60).toInt(), (seconds % 60).toInt())
             circularView.setProgress(timeLeft.toFloat() / totalTime)
-
             if (isTimerRunning) startTimer(timeLeft)
         } else {
             val seconds = timeLeft / 1000
             circularView.setTime((seconds / 60).toInt(), (seconds % 60).toInt())
         }
-
 
         themeSwitch.setOnCheckedChangeListener { _, isChecked ->
             sharedPref.edit().putBoolean("dark_mode", isChecked).apply()
@@ -148,7 +266,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         startButton.setOnClickListener {
-            if(startButton.text.toString()=="Snooze"){
+            if (startButton.text.toString() == "Snooze") {
                 player?.stop()
                 player?.release()
                 player = null
@@ -157,8 +275,7 @@ class MainActivity : AppCompatActivity() {
                 val seconds = timeLeft / 1000
                 circularView.setTime((seconds / 60).toInt(), (seconds % 60).toInt())
                 circularView.setProgress(1f)
-            }
-            else if (!isTimerRunning) {
+            } else if (!isTimerRunning) {
                 startTimer(timeLeft)
                 startButton.text = "Pause"
                 resetButton.isEnabled = true
@@ -184,28 +301,50 @@ class MainActivity : AppCompatActivity() {
             )
             recreate()
         }
-
     }
 
+
+    override fun onMediaInfoUpdatedWithImage(title: String?, artist: String?, isPlaying: Boolean, position: Long?, albumArt1: Bitmap?,duration: Long?) {
+        songTitle.text = title ?: "Me, Myself &amp; I"
+        songArtist.text = artist ?: "G-Eazy, Bebe Rexha"
+        PlayPauseButton.setImageResource(
+            if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+        )
+        val hasSong = !title.isNullOrEmpty() || !artist.isNullOrEmpty()
+
+        if (hasSong && isPlaying && !isAnimating) {
+            isAnimating = true
+            handler.post(updateBackgroundRunnable)
+        } else if ((!hasSong || !isPlaying) && isAnimating) {
+            isAnimating = false
+            handler.removeCallbacks(updateBackgroundRunnable)
+        }
+        if (albumArt1 != null) {
+            albumArt.setImageBitmap(albumArt1)
+            val drawable = BitmapDrawable(resources, albumArt1)
+//            val gradientDrawable = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.TRANSPARENT, Color.parseColor("#80000000")))
+//            gradientDrawable.cornerRadius = 16f  // Optional: adjust the corner radius to match your design
+//            val layerDrawable = LayerDrawable(arrayOf(drawable, gradientDrawable))
+//            musicPlayer.background = layerDrawable
+        }
+        if (position != null && duration != null && duration > 0) {
+            musicProgress.max = duration.toInt()
+            musicProgress.progress = position.toInt()
+            totalTimeText.text = String.format("%01d:%02d", (duration / 1000 / 60).toInt(), (duration / 1000 % 60).toInt())
+            timeElapsed.text = String.format("%01d:%02d", (position / 1000 / 60).toInt(), (position / 1000 % 60).toInt())+'/'
+        }
+    }
+
+
     private fun updateThemeUI(isDark: Boolean) {
-        themeIcon.text = if (isDark) "🌙" else "☀️"
+        themeIcon.text = if (isDark) "\uD83C\uDF19" else "\u2600\uFE0F"
         logoText.setTextColor(if (isDark) Color.WHITE else Color.BLACK)
         resetButton.setTextColor(if (isDark) Color.WHITE else Color.BLACK)
         startButton.setTextColor(Color.BLACK)
         circularView.setTextColor(if (isDark) Color.WHITE else Color.BLACK)
         mainLayout.setBackgroundColor(if (isDark) Color.BLACK else Color.WHITE)
-        if(isDark){
-            logoRow.background = ContextCompat.getDrawable(this, R.drawable.logo_background)
-        }
-        else {
-            logoRow.background = ContextCompat.getDrawable(this, R.drawable.logo_background_white)
-        }
-//        if (isDark) {
-//            logoImage.setImageResource(R.drawable.logo)
-//        } else {
-//            logoImage.setImageResource(R.drawable.logo_white)
-//        }
-
+        logoRow.background = ContextCompat.getDrawable(this,
+            if (isDark) R.drawable.logo_background else R.drawable.logo_background_white)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -214,13 +353,13 @@ class MainActivity : AppCompatActivity() {
         outState.putLong("totalTime", totalTime)
         outState.putLong("timeLeft", timeLeft)
         outState.putBoolean("isTimerRunning", isTimerRunning)
-        outState.putString("startButton.text",startButton.text.toString())
-        outState.putBoolean("resetButton.isEnabled",resetButton.isEnabled)
+        outState.putString("startButton.text", startButton.text.toString())
+        outState.putBoolean("resetButton.isEnabled", resetButton.isEnabled)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        unregisterReceiver(mediaInfoReceiver)
+        MediaInfoDispatcher.listener = null
         player?.stop()
         player?.release()
         player = null
@@ -230,20 +369,16 @@ class MainActivity : AppCompatActivity() {
         requestDnd(true)
         setStatusBarColor(Color.parseColor("#FF69B4"))
         isTimerRunning = true
-
         timer = object : CountDownTimer(startTime, 50) {
             override fun onTick(millisUntilFinished: Long) {
                 circularView.setEditable(false)
                 timeLeft = millisUntilFinished
-
                 circularView.setProgress(millisUntilFinished.toFloat() / totalTime)
-
                 if (millisUntilFinished % 1000L < 50L) {
                     val seconds = millisUntilFinished / 1000
                     circularView.setTime((seconds / 60).toInt(), (seconds % 60).toInt())
                 }
             }
-
             override fun onFinish() {
                 finishTimer()
             }
@@ -256,9 +391,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun resetTimer() {
-        if(startButton.text.toString()=="Snooze"){
-            return
-        }
+        if (startButton.text.toString() == "Snooze") return
         circularView.setEditable(true)
         timer?.cancel()
         isTimerRunning = false
@@ -299,11 +432,8 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
             startActivity(intent)
         }
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (!notificationManager.isNotificationPolicyAccessGranted) {
-                startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
-            } else {
+            if (notificationManager.isNotificationPolicyAccessGranted) {
                 notificationManager.setInterruptionFilter(
                     if (enable) NotificationManager.INTERRUPTION_FILTER_PRIORITY
                     else NotificationManager.INTERRUPTION_FILTER_ALL
@@ -316,10 +446,3 @@ class MainActivity : AppCompatActivity() {
         if (!isTimerRunning) super.onBackPressed()
     }
 }
-
-// To do :
-// Debug the Mode Switching Error - Done
-// Make the timer go smoother - Done
-// Enable music even when dnd is on - Done
-// Add a Alarm like thing after the end of the timer - Done
-// Show music being played
