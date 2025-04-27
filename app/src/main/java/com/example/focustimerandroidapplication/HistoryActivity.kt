@@ -1,5 +1,6 @@
 package com.example.focustimerandroidapplication
 
+import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -16,6 +17,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.PropertyName
+import java.util.concurrent.TimeUnit
 
 class HistoryActivity : AppCompatActivity() {
 
@@ -84,10 +86,27 @@ class HistoryActivity : AppCompatActivity() {
         inner class HistoryViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             private val timeTextView: TextView = itemView.findViewById(R.id.historyTime)
             private val descriptionTextView: TextView = itemView.findViewById(R.id.historyDescription)
-
+            private val Actualtime: TextView = itemView.findViewById(R.id.actualTime)
             fun bind(historyItem: HistoryItem) {
-                timeTextView.text = (historyItem.time/1000).toString() + " seconds"
+                val totalSeconds = historyItem.time / 1000
+
+                val hours = TimeUnit.SECONDS.toHours(totalSeconds)
+                val minutes = TimeUnit.SECONDS.toMinutes(totalSeconds) % 60
+                val seconds = totalSeconds % 60
+
+                timeTextView.text = String.format("%02d:%02d:%02d", hours, minutes, seconds)
                 descriptionTextView.text = historyItem.action
+                if(historyItem.action=="Snooze") {
+                    descriptionTextView.setTextColor(Color.parseColor("#FFFF00"))
+                }
+                else if(historyItem.action=="Start"){
+                    descriptionTextView.setTextColor(Color.parseColor("#32CD32"))
+                }
+                else{
+                    descriptionTextView.setTextColor(Color.parseColor("#FF1D1D"))
+                }
+                Actualtime.text = historyItem.actualtime
+
             }
         }
     }
