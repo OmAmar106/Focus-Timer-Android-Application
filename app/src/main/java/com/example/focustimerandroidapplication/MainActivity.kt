@@ -36,6 +36,11 @@ import android.view.KeyEvent
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.Paint
 import androidx.core.graphics.ColorUtils
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
@@ -183,6 +188,9 @@ class MainActivity : AppCompatActivity(), MediaInfoListener {
     private lateinit var prevButton: ImageButton
     private lateinit var nextButton: ImageButton
 
+    private lateinit var historyButton: ImageButton
+
+    private val db = Firebase.firestore
     private fun isNotificationListenerEnabled(): Boolean {
         val cn = ComponentName(this, MediaNotificationListener::class.java)
         val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
@@ -225,12 +233,20 @@ class MainActivity : AppCompatActivity(), MediaInfoListener {
         prevButton = findViewById(R.id.prevButton)
         nextButton = findViewById(R.id.nextButton)
         PlayPauseButton = findViewById(R.id.playPauseButton)
+        historyButton = findViewById(R.id.historyButton)
 
         albumArt = findViewById(R.id.albumArt)
         resetButton.text = "Reset"
         resetButton.isEnabled = false
         themeSwitch.isChecked = isDarkMode
         updateThemeUI(isDarkMode)
+
+        historyButton.setOnClickListener {
+            if(!isTimerRunning){
+                val intent = Intent(this, HistoryActivity::class.java)
+                startActivity(intent)
+            }
+        }
 
         if (savedInstanceState != null) {
             initialTime = savedInstanceState.getLong("initialTime", 60000L)
@@ -265,6 +281,14 @@ class MainActivity : AppCompatActivity(), MediaInfoListener {
         }
 
         startButton.setOnClickListener {
+            val time = hashMapOf(
+                "action" to startButton.text.toString(),
+                "time" to timeLeft,
+                "actual time" to SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
+            )
+
+            db.collection("time").add(time)
+
             if (startButton.text.toString() == "Snooze") {
                 player?.stop()
                 player?.release()
@@ -394,6 +418,12 @@ class MainActivity : AppCompatActivity(), MediaInfoListener {
         val seconds = timeLeft / 1000
         circularView.setTime((seconds / 60).toInt(), (seconds % 60).toInt())
         circularView.setProgress(1f)
+        val time = hashMapOf(
+            "action" to resetButton.text.toString(),
+            "time" to timeLeft,
+            "actual time" to SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
+        )
+        db.collection("time").add(time)
         startButton.text = "Start"
         resetButton.isEnabled = false
         requestDnd(false)
